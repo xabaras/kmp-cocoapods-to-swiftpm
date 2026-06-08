@@ -1,7 +1,7 @@
 ---
 name: kmp-cocoapods-to-swiftpm
 description: Refactor a Kotlin Multiplatform / Compose Multiplatform project from CocoaPods-based iOS dependency integration to Swift Package Manager import tooling, preserving compatible versions and updating Gradle/Xcode configuration safely.
-version: 1.0
+version: 1.0.1
 author: Paolo Montalto
 tags:
   - kotlin-multiplatform
@@ -164,8 +164,19 @@ Example pattern:
 import cocoapods.FirebaseAnalytics.FIRAnalytics
 
 // new
-import swiftPMImport.org.example.package.FIRAnalytics
+import swiftPMImport.ExampleProject.shared.FIRAnalytics
 ```
+
+Where:
+- `ExampleProject` is based on the Gradle project identity, typically derived from `rootProject.name`.
+- `shared` is the KMP shared module name.
+- The module segment may be `shared`, `composeApp`, or another actual shared module name used by the project.
+
+Rules for import migration:
+- Do not rewrite imports to an app package namespace such as `swiftPMImport.org.example.package.*`.
+- Prefer the SwiftPM import namespace shaped like `swiftPMImport.<ProjectName>.<SharedModule>.*`.
+- Derive the actual namespace from the generated imports available after Gradle sync / SwiftPM resolution.
+- If the generated import root differs from the expected pattern, inspect the generated imports and use the real one from the project.
 
 Do not mass-rewrite blindly; verify the generated package path in the project.
 
