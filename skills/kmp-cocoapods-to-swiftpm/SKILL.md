@@ -1,7 +1,7 @@
 ---
 name: kmp-cocoapods-to-swiftpm
 description: Refactor a Kotlin Multiplatform / Compose Multiplatform project from CocoaPods-based iOS dependency integration to Swift Package Manager import tooling, preserving compatible versions and updating Gradle/Xcode configuration safely.
-version: 1.0.1
+version: 1.0.2
 author: Paolo Montalto
 tags:
   - kotlin-multiplatform
@@ -179,6 +179,35 @@ Rules for import migration:
 - If the generated import root differs from the expected pattern, inspect the generated imports and use the real one from the project.
 
 Do not mass-rewrite blindly; verify the generated package path in the project.
+
+### Phase 4.1: Troubleshooting `$stable` crashes on serialized models
+
+In projects that use Compose together with Ktor and `kotlinx.serialization`, shared data models may sometimes crash at runtime because of Compose stability instrumentation conflicts involving generated `$stable` fields. In that situation, add a Compose stability configuration file and exclude only the affected serialized model packages from instrumentation.
+
+Example `compose-stability.conf`:
+
+```text
+// Stability configuration for Compose compiler
+// Exclude serialized data models from Compose stability instrumentation
+com.example.data.model.**
+```
+
+Example shared-module `build.gradle.kts` configuration:
+
+```kotlin
+composeCompiler {
+    @Suppress("OPT_IN_USAGE")
+    stabilityConfigurationFiles.add(
+        rootProject.layout.projectDirectory.file("compose-stability.conf")
+    )
+}
+```
+
+Rules:
+- Apply this workaround only if the module actually uses Compose compiler instrumentation.
+- Scope the exclusion narrowly to DTOs or serialized model packages.
+- Do not exclude the whole shared codebase unless there is no narrower safe option.
+- Mention this change explicitly in the migration summary as a compatibility fix for Compose stability instrumentation and `kotlinx.serialization`.
 
 ### Phase 5: Reconfigure Xcode project
 
