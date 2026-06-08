@@ -1,0 +1,32 @@
+{
+  "name": "xabaras-kmp-cocoapods-to-swiftpm",
+  "owner": {
+    "name": "Paolo Montalto"
+  },
+  "metadata": {
+    "description": "Claude Code marketplace entry for a Kotlin Multiplatform skill that migrates CocoaPods-based iOS integrations to Swift Package Manager.",
+    "version": "1.0.1"
+  },
+  "plugins": [
+    {
+      "name": "kmp-cocoapods-to-swiftpm",
+      "description": "Refactor Kotlin Multiplatform and Compose Multiplatform projects from CocoaPods to SwiftPM, preserving versions, updating Kotlin to 2.4.0, and handling Xcode direct integration.",
+      "author": {
+        "name": "Paolo Montalto"
+      },
+      "category": "development",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/xabaras/kmp-cocoapods-to-swiftpm",
+        "path": "skills/kmp-cocoapods-to-swiftpm",
+        "ref": "main"
+      },
+      "strict": false,
+      "skills": [
+        "./"
+      ],
+      "homepage": "https://github.com/xabaras/kmp-cocoapods-to-swiftpm",
+      "version": "1.0.1"
+    }
+  ]
+}

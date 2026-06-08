@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
+  "name": "kmp-cocoapods-to-swiftpm",
+  "version": "1.0.1",
+  "description": "Refactor Kotlin Multiplatform and Compose Multiplatform projects from CocoaPods to Swift Package Manager, preserving versions, upgrading Kotlin to 2.4.0, and handling Xcode direct integration.",
+  "author": {
+    "name": "Paolo Montalto"
+  },
+  "homepage": "https://github.com/xabaras/kmp-cocoapods-to-swiftpm",
+  "license": "MIT"
+}
