@@ -1,7 +1,7 @@
 ---
 name: kmp-cocoapods-to-swiftpm
 description: Refactor a Kotlin Multiplatform / Compose Multiplatform project from CocoaPods-based iOS dependency integration to Swift Package Manager import tooling, preserving compatible versions and updating Gradle/Xcode configuration safely.
-version: 1.0.2
+version: 1.0.3
 author: Paolo Montalto
 tags:
   - kotlin-multiplatform
@@ -257,15 +257,32 @@ Rules:
 - If the generated command includes `GRADLE_PROJECT_PATH`, preserve it.
 - Do not assume that only `integrateLinkagePackage` is needed; use the exact generated command where possible.
 
-### Phase 6: Remove CocoaPods integration
+### Phase 6: Remove CocoaPods from the project
 
-Only after the project builds successfully with SwiftPM import:
+After SwiftPM import is working and the iOS project builds successfully, remove CocoaPods completely from the project.
 
-- Remove the KMP module line from `Podfile`, or fully remove CocoaPods usage if no pods remain.
-- Run `pod install` if partial CocoaPods usage remains.
-- Remove the `cocoapods {}` block entirely when all migrated dependencies are handled by SwiftPM.
-- Remove `kotlin("native.cocoapods")` from the relevant Gradle plugins if the project no longer needs CocoaPods at all.
-- If fully migrating away from CocoaPods direct integration leftovers, clean the iOS setup as needed, for example with `pod deintegrate` where appropriate.
+1. Remove the entire `cocoapods {}` block from the shared module `build.gradle.kts`.
+2. Remove the CocoaPods Gradle plugin from every relevant `plugins {}` block.
+3. If the project uses a version catalog, remove the CocoaPods plugin alias and related version entry from `gradle/libs.versions.toml`.
+4. In the `iosApp` directory, run:
+
+```bash
+pod deintegrate
+```
+
+5. Delete the following from the `iosApp` directory:
+- `Podfile`
+- `iosApp.xcworkspace`
+- `Pods/`
+
+6. Delete `Podfile.lock` if it exists.
+7. Delete any generated `.podspec` file if it exists.
+8. Open and use the iOS project from `.xcodeproj`.
+9. Do **not** run `pod install`.
+
+Rules:
+- This skill is for complete CocoaPods removal.
+- Mention the removed CocoaPods files and directories explicitly in the migration summary.
 
 ## Refactoring instructions for Claude
 
@@ -295,7 +312,7 @@ A short explanation of:
 - which versions were preserved
 - which versions were researched because none were specified
 - what Xcode integration command should be run
-- whether CocoaPods can already be removed or must remain temporarily
+- which CocoaPods artifacts were removed during full cleanup
 
 ### 2. File-by-file changes
 For each changed file:
@@ -311,18 +328,23 @@ Include:
 - generated integration command executed
 - Kotlin imports updated
 - iOS app builds
-- CocoaPods removed only if no longer needed
+- CocoaPods plugin removed
+- `cocoapods {}` block removed
+- CocoaPods plugin alias removed from `libs.versions.toml` when version catalogs are used
+- `pod deintegrate` executed
+- `Podfile`, `Pods/`, and `iosApp.xcworkspace` removed
+- project opened from `.xcodeproj`
 
 ## Guardrails
 
 - Do not convert versioned pods to unversioned SwiftPM declarations.
 - Do not silently upgrade versions unless compatibility requires it and the reason is explained.
-- Do not delete Podfile content unrelated to the KMP module if native iOS code still uses CocoaPods.
 - Do not assume package product names equal pod names.
 - Do not assume one pod equals one Swift package repository.
 - Do not remove `iosX64()` / simulator targets unless there is a justified modernization step.
 - Do not rewrite unrelated Gradle or source code.
 - Do not hardcode `:composeApp`; derive the actual shared module path from the project.
+- Do not leave `Podfile`, `Pods/`, or `iosApp.xcworkspace` in place after a successful migration.
 
 ## Example decision rules
 
@@ -380,7 +402,7 @@ Required behavior:
 
 Use this skill with a prompt such as:
 
-> Migrate this KMP project from CocoaPods to SwiftPM. Inspect all `build.gradle.kts`, `Podfile`, and iOS integration files. Preserve any explicitly declared pod versions. If a pod has no version, search for a compatible Swift package version and pin it explicitly. Replace the project's current Kotlin version with 2.4.0 final when it is below 2.4.0, because earlier versions do not support `swiftPMDependencies {}`. Keep CocoaPods only as long as needed for an intermediate working state, then remove it cleanly. When reconfiguring Xcode, use the generated integration command and substitute the real shared module path, such as `:composeApp` or `:shared`.
+> Migrate this KMP project from CocoaPods to SwiftPM. Inspect all `build.gradle.kts`, `Podfile`, and iOS integration files. Preserve any explicitly declared pod versions. If a pod has no version, search for a compatible Swift package version and pin it explicitly. Replace the project's current Kotlin version with 2.4.0 final when it is below 2.4.0, because earlier versions do not support `swiftPMDependencies {}`. After the SwiftPM migration is working, fully remove CocoaPods by removing the plugin, deleting the `cocoapods {}` block, running `pod deintegrate`, deleting `Podfile`, `Pods/`, and `iosApp.xcworkspace`, and using `.xcodeproj` instead of `.xcworkspace`. When reconfiguring Xcode, use the generated integration command and substitute the real shared module path, such as `:composeApp` or `:shared`.
 
 ## Success criteria
 
@@ -391,4 +413,4 @@ The migration is complete when:
 - The generated integration command has been identified and executed.
 - Framework configuration lives under `binaries.framework {}` instead of `cocoapods.framework {}`.
 - Kotlin imports compile against SwiftPM-imported APIs.
-- CocoaPods integration has been removed or minimized appropriately.
+- CocoaPods has been fully removed from the Gradle and iOS project setup.
