@@ -12,6 +12,8 @@ The skill helps an agent migrate a KMP project from CocoaPods to SwiftPM by guid
 - translate CocoaPods dependencies into `swiftPMDependencies {}` declarations
 - preserve explicit pod versions, and pin researched versions when the original pod had none
 - update Xcode integration
+- resolve SwiftPM dependencies via Gradle CLI (`fetchSyntheticImportProjectPackages`) without requiring Android Studio
+- verify and fix `KotlinMultiplatformLinkedPackage` `relativePath` in the Xcode project when `integrateLinkagePackage` writes an incorrect path
 - update Kotlin imports for SwiftPM-based generated APIs
 - fully remove CocoaPods from the project after migration succeeds
 - handle known Compose stability workarounds when needed

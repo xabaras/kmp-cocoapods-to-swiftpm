@@ -1,7 +1,7 @@
 ---
 name: kmp-cocoapods-to-swiftpm
 description: Refactor a Kotlin Multiplatform / Compose Multiplatform project from CocoaPods-based iOS dependency integration to Swift Package Manager import tooling, preserving compatible versions and updating Gradle/Xcode configuration safely.
-version: 1.0.3
+version: 1.0.4
 author: Paolo Montalto
 tags:
   - kotlin-multiplatform
@@ -220,8 +220,15 @@ Expected workflow:
 3. Inspect the build error output in Xcode.
 4. Copy the generated integration command from the error output.
 5. Run that command from the terminal.
-6. Resolve SwiftPM dependencies from IntelliJ IDEA / Android Studio.
-7. Rebuild and verify.
+6. Resolve SwiftPM dependencies via Gradle CLI (preferred over Android Studio / IDEA):
+
+```bash
+./gradlew :<shared-module-name>:fetchSyntheticImportProjectPackages
+```
+
+   Android Studio / IDEA **Tools → Swift Package Manager → Resolve Dependencies** is an acceptable alternative when the CLI task is unavailable.
+7. Verify and fix the `KotlinMultiplatformLinkedPackage` path in the Xcode project (see below). Do this before treating Xcode integration as complete.
+8. Rebuild and verify in Xcode using `.xcodeproj`.
 
 #### Xcode integration command
 
@@ -256,6 +263,27 @@ Rules:
 - Prefer the exact command emitted by Xcode, especially when it includes both `integrateEmbedAndSign` and `integrateLinkagePackage`.
 - If the generated command includes `GRADLE_PROJECT_PATH`, preserve it.
 - Do not assume that only `integrateLinkagePackage` is needed; use the exact generated command where possible.
+
+#### Verify KotlinMultiplatformLinkedPackage path
+
+After `integrateLinkagePackage`, Kotlin/`mutatePbxproj` may write an incorrect `XCLocalSwiftPackageReference.relativePath` in `project.pbxproj`.
+
+Known failure mode:
+
+- `relativePath` is set to the bare name `KotlinMultiplatformLinkedPackage` (resolved next to the `.xcodeproj`, e.g. `iosApp/KotlinMultiplatformLinkedPackage`).
+- The generated package actually lives under the shared KMP module, typically `<sharedModule>/iosApp/KotlinMultiplatformLinkedPackage/`.
+- Xcode then fails with: the folder “KotlinMultiplatformLinkedPackage” doesn’t exist.
+
+Mandatory checks after integration:
+
+1. Find the generated package: search for `**/KotlinMultiplatformLinkedPackage/Package.swift`, excluding `build/` and other generated caches.
+2. Read `XCLocalSwiftPackageReference` in the iOS `project.pbxproj` and note `relativePath`.
+3. Resolve that `relativePath` against the directory that contains the `.xcodeproj` (not the repo root). Confirm the resolved directory exists and contains `Package.swift`.
+4. If it does not resolve:
+   - Compute the correct path from the `.xcodeproj` directory to the found package directory.
+   - Update `relativePath` in `project.pbxproj` accordingly (example for a typical Compose template: `../composeApp/iosApp/KotlinMultiplatformLinkedPackage`).
+   - Do **not** move, copy, or symlink the package to “fix” a wrong reference; fix the reference instead.
+5. Only after the path resolves correctly, rebuild in Xcode.
 
 ### Phase 6: Remove CocoaPods from the project
 
@@ -297,9 +325,11 @@ When applying this skill to a repository, follow this exact behavior:
 7. Move framework settings from `cocoapods.framework {}` to `binaries.framework {}`.
 8. Update Kotlin imports that change from `cocoapods.*` to SwiftPM-imported namespaces.
 9. Reconfigure Xcode using the generated command from the Xcode build error output.
-10. Treat `:composeApp` and `:shared` as examples, not universal constants.
-11. Explain each change briefly in a migration summary.
-12. If a pod has no SwiftPM support, stop and report it instead of fabricating a migration.
+10. Resolve SwiftPM dependencies with `./gradlew :<module>:fetchSyntheticImportProjectPackages` (preferred over IDE UI).
+11. Verify that `XCLocalSwiftPackageReference.relativePath` for `KotlinMultiplatformLinkedPackage` resolves to an existing directory with `Package.swift`; if `mutatePbxproj` wrote only the basename, fix the relative path (do not move the package).
+12. Treat `:composeApp` and `:shared` as examples, not universal constants.
+13. Explain each change briefly in a migration summary.
+14. If a pod has no SwiftPM support, stop and report it instead of fabricating a migration.
 
 ## Output format
 
@@ -323,9 +353,11 @@ For each changed file:
 ### 3. Verification checklist
 Include:
 - Gradle sync succeeds
-- SwiftPM dependencies resolve
+- SwiftPM dependencies resolve (`fetchSyntheticImportProjectPackages` executed, or IDE Resolve Dependencies as fallback)
 - Xcode project reconfigured
 - generated integration command executed
+- `XCLocalSwiftPackageReference.relativePath` for `KotlinMultiplatformLinkedPackage` resolves to an existing directory containing `Package.swift`
+- linked package path corrected if `mutatePbxproj` wrote only the basename
 - Kotlin imports updated
 - iOS app builds
 - CocoaPods plugin removed
