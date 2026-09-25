@@ -1,7 +1,7 @@
 ---
 name: kmp-cocoapods-to-swiftpm
 description: Refactor a Kotlin Multiplatform / Compose Multiplatform project from CocoaPods-based iOS dependency integration to Swift Package Manager import tooling, preserving compatible versions and updating Gradle/Xcode configuration safely.
-version: 1.0.4
+version: 1.0.5
 author: Paolo Montalto
 tags:
   - kotlin-multiplatform
@@ -264,26 +264,36 @@ Rules:
 - If the generated command includes `GRADLE_PROJECT_PATH`, preserve it.
 - Do not assume that only `integrateLinkagePackage` is needed; use the exact generated command where possible.
 
-#### Verify KotlinMultiplatformLinkedPackage path
+#### Verify KotlinMultiplatformLinkedPackage path and package shape
 
-After `integrateLinkagePackage`, Kotlin/`mutatePbxproj` may write an incorrect `XCLocalSwiftPackageReference.relativePath` in `project.pbxproj`.
+After `integrateLinkagePackage`, Kotlin/`mutatePbxproj` may write an incorrect `XCLocalSwiftPackageReference.relativePath` in `project.pbxproj`, and/or the linked `Package.swift` may not expose SwiftPM products to the app target.
 
-Known failure mode:
+Known failure modes:
 
-- `relativePath` is set to the bare name `KotlinMultiplatformLinkedPackage` (resolved next to the `.xcodeproj`, e.g. `iosApp/KotlinMultiplatformLinkedPackage`).
-- The generated package actually lives under the shared KMP module, typically `<sharedModule>/iosApp/KotlinMultiplatformLinkedPackage/`.
-- Xcode then fails with: the folder “KotlinMultiplatformLinkedPackage” doesn’t exist.
+1. **Missing path**
+   - `relativePath` is set to the bare name `KotlinMultiplatformLinkedPackage` (resolved next to the `.xcodeproj`, e.g. `iosApp/KotlinMultiplatformLinkedPackage`).
+   - No `Package.swift` exists at that location (or only under the shared module / build caches).
+   - Xcode fails with: the folder “KotlinMultiplatformLinkedPackage” doesn’t exist.
+
+2. **Path exists but products are only transitive (dylib split)**
+   - A `Package.swift` exists, but the umbrella target depends only on a dynamic subpackage (e.g. `KotlinMultiplatformLinkedPackageDylib`) while the declared SwiftPM products live solely on that dylib.
+   - With a **static** Kotlin/Native framework (`isStatic = true`) whose cinterop / app Swift code references those products, the final app link can fail with `Undefined symbols` for ObjC/Swift APIs from those packages.
+   - This is especially common with binary or static SPM libraries (e.g. Google Mobile Ads, Firebase iOS SDK), but the rule is generic: products used by the static framework or the app must be **direct** dependencies of the umbrella product Xcode links.
 
 Mandatory checks after integration:
 
-1. Find the generated package: search for `**/KotlinMultiplatformLinkedPackage/Package.swift`, excluding `build/` and other generated caches.
+1. Find candidate packages: search for `**/KotlinMultiplatformLinkedPackage/Package.swift`, excluding `build/` and other generated caches.
 2. Read `XCLocalSwiftPackageReference` in the iOS `project.pbxproj` and note `relativePath`.
 3. Resolve that `relativePath` against the directory that contains the `.xcodeproj` (not the repo root). Confirm the resolved directory exists and contains `Package.swift`.
-4. If it does not resolve:
-   - Compute the correct path from the `.xcodeproj` directory to the found package directory.
-   - Update `relativePath` in `project.pbxproj` accordingly (example for a typical Compose template: `../composeApp/iosApp/KotlinMultiplatformLinkedPackage`).
-   - Do **not** move, copy, or symlink the package to “fix” a wrong reference; fix the reference instead.
-5. Only after the path resolves correctly, rebuild in Xcode.
+4. Open that `Package.swift` and verify the umbrella library target:
+   - Prefer a **flat** package: `type: .none` (or equivalent automatic linkage) whose target depends **directly** on every SwiftPM product declared in `swiftPMDependencies` / used from Kotlin or app Swift.
+   - Do **not** treat a package as correct merely because the path resolves, if the umbrella only depends on a dylib subpackage and the products are not re-exported to the app link line.
+5. If the path does not resolve, or the only found package is a dylib-only split that fails the flat-product check:
+   - Prefer ensuring a flat `Package.swift` under `iosApp/KotlinMultiplatformLinkedPackage` (next to the `.xcodeproj`) with the SwiftPM products as **direct** umbrella dependencies, and `relativePath = KotlinMultiplatformLinkedPackage`.
+   - Do **not** “fix” a missing or wrong setup by pointing `relativePath` at a dylib-split package under the shared module (e.g. `../composeApp/iosApp/KotlinMultiplatformLinkedPackage`) when that package does not expose products directly to the app.
+   - Do **not** use a copy/symlink of the package as the primary fix when the `Package.swift` shape is wrong; correct path **and** product graph.
+6. Align the iOS deployment target with the linked package `platforms` (often iOS 15.0+).
+7. Only after path and package shape are correct, rebuild in Xcode.
 
 ### Phase 6: Remove CocoaPods from the project
 
@@ -326,7 +336,7 @@ When applying this skill to a repository, follow this exact behavior:
 8. Update Kotlin imports that change from `cocoapods.*` to SwiftPM-imported namespaces.
 9. Reconfigure Xcode using the generated command from the Xcode build error output.
 10. Resolve SwiftPM dependencies with `./gradlew :<module>:fetchSyntheticImportProjectPackages` (preferred over IDE UI).
-11. Verify that `XCLocalSwiftPackageReference.relativePath` for `KotlinMultiplatformLinkedPackage` resolves to an existing directory with `Package.swift`; if `mutatePbxproj` wrote only the basename, fix the relative path (do not move the package).
+11. Verify that `XCLocalSwiftPackageReference.relativePath` for `KotlinMultiplatformLinkedPackage` resolves to an existing directory with `Package.swift`, **and** that the umbrella target declares the SwiftPM products as **direct** dependencies (flat package). If the only available package is a dylib-only split, use a flat package under `iosApp/KotlinMultiplatformLinkedPackage` with bare `relativePath` instead of pointing at the dylib split.
 12. Treat `:composeApp` and `:shared` as examples, not universal constants.
 13. Explain each change briefly in a migration summary.
 14. If a pod has no SwiftPM support, stop and report it instead of fabricating a migration.
@@ -357,9 +367,10 @@ Include:
 - Xcode project reconfigured
 - generated integration command executed
 - `XCLocalSwiftPackageReference.relativePath` for `KotlinMultiplatformLinkedPackage` resolves to an existing directory containing `Package.swift`
-- linked package path corrected if `mutatePbxproj` wrote only the basename
+- linked package umbrella declares SwiftPM products as **direct** dependencies (flat package), not only via a dylib subpackage
+- linked package path / shape corrected if `mutatePbxproj` wrote a bad basename or a dylib-only graph
 - Kotlin imports updated
-- iOS app builds
+- iOS app builds (including link; no `Undefined symbols` for SPM product APIs used by a static Kotlin framework)
 - CocoaPods plugin removed
 - `cocoapods {}` block removed
 - CocoaPods plugin alias removed from `libs.versions.toml` when version catalogs are used
@@ -377,6 +388,7 @@ Include:
 - Do not rewrite unrelated Gradle or source code.
 - Do not hardcode `:composeApp`; derive the actual shared module path from the project.
 - Do not leave `Podfile`, `Pods/`, or `iosApp.xcworkspace` in place after a successful migration.
+- Do not prefer a `KotlinMultiplatformLinkedPackage` path solely because `Package.swift` exists there if the umbrella does not declare the SwiftPM products as direct dependencies.
 
 ## Example decision rules
 
@@ -429,6 +441,18 @@ XCODEPROJ_PATH='./iosApp/iosApp.xcodeproj' ./gradlew :shared:integrateLinkagePac
 Required behavior:
 - Accept this as valid when `:shared` is the actual shared module in the newer project structure.
 - Prefer the exact generated Xcode command over simplified examples.
+
+### Example E: Static Kotlin framework + transitive-only SPM products
+Situation:
+
+- Shared framework uses `isStatic = true`.
+- After `integrateLinkagePackage`, the linked `Package.swift` umbrella depends only on a dylib subpackage; SwiftPM products are declared only on that dylib.
+- App or cinterop references APIs from those products; link fails with `Undefined symbols` (common with binary/static SPM libraries such as Google Mobile Ads or Firebase, but not limited to them).
+
+Required behavior:
+- Ensure a **flat** `Package.swift` next to the `.xcodeproj` (`iosApp/KotlinMultiplatformLinkedPackage`) whose umbrella target depends **directly** on the needed products.
+- Set `relativePath = KotlinMultiplatformLinkedPackage`.
+- Do not fix the failure only by retargeting `relativePath` at a dylib-split package under the shared module.
 
 ## Suggested prompt template
 
