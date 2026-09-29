@@ -1,5 +1,7 @@
 # kmp-cocoapods-to-swiftpm
 
+**Current version:** 1.0.5
+
 This is a reusable AI agent skill for migrating Kotlin Multiplatform / Compose Multiplatform projects from CocoaPods to Swift Package Manager.
 
 This repository packages the migration workflow as an agent skill so tools like Claude Code and other SKILL.md-compatible agents can apply the same refactoring guidance consistently.
@@ -104,6 +106,25 @@ The same format is now used more broadly as an open Agent Skills standard, which
 ## Compatibility note
 
 This repository aims to stay close to the portable core of the `SKILL.md` format so it can be reused across different agent tools. Some tools add their own features or installation paths, but the fundamental pattern remains the same: a folder named after the skill, containing a `SKILL.md` file with metadata and instructions.
+
+## Changelog
+
+### 1.0.5 - 2026-09-25
+- Document that the linked `Package.swift` must be flat: SwiftPM products are direct umbrella dependencies, so static Kotlin frameworks link correctly.
+
+### 1.0.4 - 2026-09-24
+- Verify and fix `KotlinMultiplatformLinkedPackage` `relativePath` after `integrateLinkagePackage`.
+- Prefer Gradle CLI (`fetchSyntheticImportProjectPackages`) to resolve SwiftPM dependencies.
+- Bump Claude plugin metadata.
+
+### 1.0.1 - 2026-06-08
+- Fix Phase 4 (Kotlin import updates).
+- Add Claude plugin configuration.
+- Add Compose stability workaround for kotlinx.serialization models.
+- Fix the final CocoaPods cleanup phase.
+
+### 1.0.0
+- First public version of the skill.
 
 ## Contributing
 
